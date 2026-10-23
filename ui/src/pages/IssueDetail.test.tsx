@@ -5392,6 +5392,7 @@ describe("IssueDetail", () => {
 
     async function renderWithPendingTreeControl() {
       mockSidebarState.isMobile = isMobile;
+      queryClient.setQueryDefaults(treeControlKey, { retryDelay: 0 });
       mockIssuesApi.get.mockResolvedValue(createIssue());
       let resolve!: (value: Awaited<ReturnType<typeof issuesApi.getTreeControlState>>) => void;
       let reject!: (reason: Error) => void;
@@ -5447,6 +5448,64 @@ describe("IssueDetail", () => {
           "Couldn’t check whether this task is paused. Refresh to try again.",
         );
       });
+    });
+
+    it("keeps the composer enabled when a refetch fails after a successful response", async () => {
+      mockIssuesApi.addComment.mockClear().mockResolvedValue(createIssueComment({ body: "Send after refetch" }));
+      const response = await renderWithPendingTreeControl();
+      response.resolve({ activePauseHold: null });
+      await waitForAssertion(() => {
+        expect(queryClient.getQueryState(treeControlKey)?.status).toBe("success");
+      });
+
+      mockIssuesApi.getTreeControlState.mockClear().mockRejectedValue(new Error("502 Bad Gateway"));
+      await act(async () => {
+        await queryClient.invalidateQueries({ queryKey: treeControlKey });
+      });
+      await waitForAssertion(() => {
+        expect(queryClient.getQueryState(treeControlKey)?.status).toBe("error");
+        expect(mockIssuesApi.getTreeControlState).toHaveBeenCalledTimes(3);
+        expect(composerProps().composerDisabledReason).toBeNull();
+        expect(composerProps().composerPause).toBeNull();
+      });
+      await act(async () => {
+        await composerProps().onAdd("Send after refetch");
+      });
+      expect(mockIssuesApi.addComment).toHaveBeenCalledTimes(1);
+      expect(mockIssuesApi.addComment).toHaveBeenCalledWith(
+        "PAP-1", "Send after refetch", undefined, undefined, undefined, expect.any(String),
+      );
+    });
+
+    it("keeps a known pause hold authoritative when a refetch fails", async () => {
+      mockIssuesApi.addComment.mockClear();
+      const response = await renderWithPendingTreeControl();
+      response.resolve({
+        activePauseHold: {
+          holdId: "hold-1",
+          rootIssueId: "issue-1",
+          issueId: "issue-1",
+          isRoot: true,
+          mode: "pause",
+          reason: null,
+          releasePolicy: { strategy: "manual" },
+        },
+      });
+      await waitForAssertion(() => {
+        expect(queryClient.getQueryState(treeControlKey)?.status).toBe("success");
+        expect(composerProps().composerPause?.scope).toBe("leaf");
+      });
+
+      mockIssuesApi.getTreeControlState.mockClear().mockRejectedValue(new Error("502 Bad Gateway"));
+      await act(async () => {
+        await queryClient.invalidateQueries({ queryKey: treeControlKey });
+      });
+      await waitForAssertion(() => {
+        expect(queryClient.getQueryState(treeControlKey)?.status).toBe("error");
+        expect(mockIssuesApi.getTreeControlState).toHaveBeenCalledTimes(3);
+        expect(composerProps().composerPause?.scope).toBe("leaf");
+      });
+      expect(mockIssuesApi.addComment).not.toHaveBeenCalled();
     });
 
     it.each([true, false])("applies a late pause response (root=%s)", async (isRoot) => {
