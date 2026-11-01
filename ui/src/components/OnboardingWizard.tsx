@@ -155,7 +155,7 @@ type Step = 0 | 1 | 2 | 3 | 4 | 5;
 // wizard's registry-driven approach rather than a fixed union.
 type AdapterType = string;
 
-const ONBOARDING_ADAPTER_TYPES = new Set(["claude_local", "codex_local"]);
+const ONBOARDING_ADAPTER_TYPES = new Set(["claude_local", "codex_local", "noverhead_node"]);
 
 function restoreOnboardingAdapterType(savedAdapterType: unknown, provider?: unknown, savedCopilot?: unknown): AdapterType {
   if (savedAdapterType === "paperclip_runner" && provider === "pi") return "pi_local";
@@ -255,6 +255,7 @@ const MODEL_SOURCE_INLINE_MARKS: Record<string, ComponentType<{ className?: stri
 const API_KEY_ENV_KEYS: Record<string, string> = {
   claude_local: ANTHROPIC_API_KEY_ENV_KEY,
   codex_local: "OPENAI_API_KEY",
+  noverhead_node: "NOVERHEAD_NODE_API_KEY",
 };
 
 function apiKeyEnvKeyFor(adapterType: string): string {
@@ -716,7 +717,7 @@ function OnboardingWizardInner({
     ? selectedSavedKey.id
     : savedKeys.options[0]?.id;
   const selectedApiKey = savedKeys.options.find((option) => option.id === selectedApiKeyId);
-  const credentialMode = credentialModeChoice ?? (
+  const credentialMode = adapterType === "noverhead_node" ? "api" : credentialModeChoice ?? (
     (savedKeys.subscriptions.length > 0 || (adapterType === "claude_local" && savedKeys.storedLogin.data))
       ? "subscription" : savedKeys.options.length || adapterType === "opencode_local" ? "api" : "subscription"
   );
@@ -1231,6 +1232,7 @@ function OnboardingWizardInner({
     adapterType === "kimi_local" ||
     adapterType === "opencode_local" ||
     adapterType === "pi_local" ||
+    adapterType === "noverhead_node" ||
     adapterType === "cursor";
   // Build adapter grids dynamically from the UI registry + display metadata.
   // External/plugin adapters automatically appear with generic defaults, and
@@ -2988,6 +2990,7 @@ function OnboardingWizardInner({
                         id: opt.type,
                         label: CONNECT_SOURCE_NAMES[opt.type] ?? opt.label,
                         icon: <ModelSourceMark type={opt.type} Fallback={opt.icon} />,
+                        ...(opt.type === "noverhead_node" ? { credentialMode: "api" as const } : {}),
                       }))}
                       mode={credentialMode}
                       selectedId={
@@ -3003,10 +3006,16 @@ function OnboardingWizardInner({
                         autoConnectStartedRef.current = false;
                         setSourcePicked(true);
                         setAdapterType(id);
+                        if (id === "noverhead_node" || adapterType === "noverhead_node") setApiKey("");
+                        if (id === "noverhead_node") {
+                          setCredentialMode("api");
+                          setUrl("http://node:18766/v1");
+                          setModel("noverhead/node-default");
+                        }
                         if (id !== adapterType) setRunner("auto");
                         if (id !== adapterType) {
                           if (id === "opencode_local") setModel(DEFAULT_OPENCODE_LOCAL_MODEL);
-                          else if (id !== "codex_local") setModel("");
+                          else if (id !== "codex_local" && id !== "noverhead_node") setModel("");
                         }
                         setConnectPhase("collapsing");
                       }}
@@ -3014,7 +3023,7 @@ function OnboardingWizardInner({
 
                     {adapterRegistryLoaded && recommendedAdapters.length === 0 && (
                       <p role="status" className="text-sm text-muted-foreground">
-                        Claude and Codex are unavailable on this instance. Ask an administrator to enable one,
+                        Claude, OpenAI and NOverhead Node are unavailable on this instance. Ask an administrator to enable one,
                         or exit setup and choose New Agent on the Agents page to use another provider.
                       </p>
                     )}
@@ -3042,7 +3051,7 @@ function OnboardingWizardInner({
                       transition={{ opacity: SOURCE_LINK_EXIT, height: MAKE_ROOM }}
                     >
                       <div className="-ml-3 mt-1">
-                        <CredentialModeLink mode={credentialMode} onChange={setCredentialMode} />
+                        {adapterType !== "noverhead_node" && <CredentialModeLink mode={credentialMode} onChange={setCredentialMode} />}
                         {savedKeys.options.length > 0 && <p className="px-3 text-sm text-muted-foreground">{savedKeys.options.length} saved API {savedKeys.options.length === 1 ? "key available" : "keys available"}.</p>}
                         {credentialMode === "subscription" && authSignalStatus === "present" && <p className="px-3 text-sm text-muted-foreground">An existing provider connection is available.</p>}
                       </div>
@@ -3096,6 +3105,9 @@ function OnboardingWizardInner({
                           CONNECT_SOURCE_NAMES[adapterType] ?? adapterType
                         } API key to connect`}
                       >
+                        {adapterType === "noverhead_node" && <OnboardingCardField
+                          label="NOverhead Node URL" placeholder="http://node:18766/v1"
+                          value={url} onChange={setUrl} onSubmit={() => handleConnectStepPrimary()} />}
                         {!hasGatewaySelection && <SavedProviderKeySelect {...savedKeys} disabled={loading || adapterEnvLoading} value={selectedApiKey?.id ?? ""} onChange={(id) => {
                           setGatewayConnection(undefined);
                           if (connectionModels) setModel("");
@@ -3103,8 +3115,8 @@ function OnboardingWizardInner({
                           setApiKey("");
                         }} />}
                         {!selectedApiKey && !hasGatewaySelection && !connectionModels && <OnboardingCardField
-                          label="API key"
-                          placeholder="Enter API key here"
+                          label={adapterType === "noverhead_node" ? "Node bearer token" : "API key"}
+                          placeholder={adapterType === "noverhead_node" ? "Token with models.chat.completions grant" : "Enter API key here"}
                           masked
                           // The card is the answer to the tile just pressed, so
                           // the field is unambiguously the next thing. Carried

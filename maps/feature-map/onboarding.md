@@ -36,19 +36,25 @@ Use `/<company-prefix>/onboarding` to resume an existing company's agent setup;
 the unprefixed route starts at organization naming on self-hosted instances.
 Cloud-managed instances reuse their existing company for agent setup.
 
-First-agent onboarding offers only Claude and Codex, subject to instance adapter
+First-agent onboarding offers Claude, OpenAI (Codex) and NOverhead Node, subject to instance adapter
 availability. GitHub Copilot and other providers remain available through Add
 agent after onboarding. A saved draft for another provider requires a new choice.
-Old Copilot drafts discard the retired selection and model, including when both
+Old Copilot drafts discard the retired selection and model, including when all
 onboarding providers are disabled. The wizard no longer contains Copilot setup
 UI, connection state, or model discovery; later Add agent retains that support.
-Changing an unavailable saved provider clears its model. If both first-onboarding
+Changing an unavailable saved provider clears its model. If all first-onboarding
 providers are unavailable, the wizard explains how to enable one or use New Agent
 from the Agents page for another provider.
 Claude and Codex are harness choices, not a forced legacy runtime. Automatic
 runner selection uses the execution environment's qualified native runner and
 falls back to legacy on native Windows without changing the onboarding UI.
 Windows should default to native when its runner platform support is qualified.
+
+NOverhead Node uses the existing local Pi adapter with the Node-configured model
+and a scoped bearer stored through user secrets. Connect requires authenticated
+model discovery and a real successful Pi hello probe; warnings do not hire the
+agent. See [local integration](../../doc/NOVERHEAD-NODE.md). Component tests are
+not evidence of a live provider run or completed Owner onboarding.
 
 ### `cli-setup`
 

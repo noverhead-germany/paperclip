@@ -127,6 +127,12 @@ const adapterDisplayMap: Record<string, AdapterDisplayInfo> = {
     description: "Pi harness",
     icon: Terminal,
   },
+  noverhead_node: {
+    label: "NOverhead Node",
+    description: "Node configured provider through the Pi agent runtime",
+    icon: Cpu,
+    recommended: true,
+  },
   cursor: {
     label: "Cursor",
     description: "Cursor CLI harness",

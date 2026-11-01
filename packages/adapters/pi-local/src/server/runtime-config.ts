@@ -140,7 +140,7 @@ export async function preparePiRuntimeConfig(input: {
     await fs.writeFile(
       path.join(agentConfigDir, "models.json"),
       `${JSON.stringify({ providers }, null, 2)}\n`,
-      "utf8",
+      { encoding: "utf8", mode: 0o600 },
     );
   } catch (err) {
     // Never leak the temp dir when the write fails (e.g. disk-full): the

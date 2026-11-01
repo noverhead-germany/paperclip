@@ -96,9 +96,17 @@ testing an existing agent; interactive account login additionally requires a
 board user and owner-bound session. An agent's right to hire is not login or
 instance-environment administration authority.
 
-First-agent onboarding limits the provider picker to Claude and Codex. Other
+First-agent onboarding offers Claude, OpenAI (Codex) and NOverhead Node. Other
 providers remain available through normal agent creation; this UI choice does
 not change adapter APIs or hiring permissions.
+
+The local `noverhead_node` preset delegates to Pi and authenticates the Node
+OpenAI-compatible endpoint with a user-secret binding. Node requires its exact
+tenant and `models.chat.completions` grant. This does not grant Paperclip board,
+company or hiring authority. Probe/hire permissions remain on the existing
+routes above. Remote environments are unsupported. Source and component-test
+coverage is not permitted-agent live verification; see
+[integration limits](../../doc/NOVERHEAD-NODE.md).
 
 A name-only, held setup has no provider selection yet, so the wizard omits its
 runner choice until the provider is chosen. The existing board-only setup and

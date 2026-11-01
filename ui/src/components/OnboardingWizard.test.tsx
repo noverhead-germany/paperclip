@@ -520,7 +520,7 @@ describe("OnboardingWizard restore-gate (stale localStorage across accounts)", (
       } : {});
       try {
         expect(document.body.querySelectorAll("button[aria-checked]")).toHaveLength(0);
-        expect(document.body.textContent).toContain("Claude and Codex are unavailable on this instance.");
+        expect(document.body.textContent).toContain("Claude, OpenAI and NOverhead Node are unavailable on this instance.");
         expect(document.body.textContent).toContain("choose New Agent on the Agents page");
         const next = [...document.body.querySelectorAll("button")].find(button => isArcPrimary(button.textContent?.trim() ?? ""));
         expect(next?.disabled).toBe(true);
@@ -914,12 +914,13 @@ describe("OnboardingWizard restore-gate (stale localStorage across accounts)", (
 
   describe("hire gate: adapter authentication (claude_local, the default onboarding adapter)", () => {
     /** Drives the wizard to the Connect step, agent name already filled in. */
-    async function openConnectStep({ useApiKeys = false } = {}) {
+    async function openConnectStep({ useApiKeys = false, source = "claude_local" } = {}) {
       // The tile row is built from this registry, and the suite's default is
       // empty. That was survivable while the step preselected a source; now that
       // nothing is chosen until a tile is pressed, a step with no tiles is a step
       // that can never advance.
-      mockAdapterRegistry.list = [{ type: "claude_local" }, { type: "codex_local" }];
+      mockAdapterRegistry.list = [{ type: "claude_local" }, { type: "codex_local" },
+        ...(source === "noverhead_node" ? [{ type: "noverhead_node", recommended: true }] : [])];
       mockCompaniesApi.create.mockResolvedValue({ id: "company-new", issuePrefix: "INI" });
       window.localStorage.setItem(
         ONBOARDING_STORAGE_KEY,
@@ -968,10 +969,45 @@ describe("OnboardingWizard restore-gate (stale localStorage across accounts)", (
       // having answered — so the input surface stays closed and the step will
       // not advance until a tile is pressed. Every case below is about what
       // happens *after* that choice, so the helper makes it.
-      await pickFirstSource(clickByText);
+      if (source === "noverhead_node") await clickByText(text => text.startsWith("NOverhead Node"));
+      else await pickFirstSource(clickByText);
 
       return { root, clickByText };
     }
+
+    it.each(["pass", "fail"] as const)("requires the real Node probe before ordinary onboarding completion: %s", async status => {
+      const key = "node-scoped-test-token";
+      mockSecretsApi.createUserSecretDefinition.mockResolvedValue({ id: "node-key-definition" });
+      mockSecretsApi.createMyUserSecret.mockResolvedValue({ id: "node-key-secret" });
+      mockAdapterBuild.buildAdapterConfig.mockImplementation(values => values?.adapterType === "noverhead_node"
+        ? { model: "noverhead/node-default", url: values.url } : {});
+      mockAgentsApi.testEnvironment.mockResolvedValue({ adapterType: "noverhead_node", status,
+        checks: [{ code: status === "pass" ? "pi_hello_probe_passed" : "noverhead_node_connection_failed", level: status === "pass" ? "info" : "error", message: "Node probe result" }], testedAt: "2026-11-01" });
+      const { root, clickByText } = await openConnectStep({ source: "noverhead_node" });
+      try {
+        expect(document.body.querySelector('input[aria-label="Node bearer token"]')).not.toBeNull();
+        expect(document.body.querySelector('input[aria-label="NOverhead Node URL"]')).not.toBeNull();
+        await act(async () => setControlledValue(document.body.querySelector('input[type="password"]')!, key));
+        await flushReact();
+        await clickByText(text => isArcPrimary(text));
+        expect(mockAgentsApi.testEnvironment).toHaveBeenCalledWith("company-new", "noverhead_node", expect.objectContaining({
+          adapterConfig: expect.objectContaining({ model: "noverhead/node-default", env: expect.objectContaining({ NOVERHEAD_NODE_API_KEY: expect.any(Object) }) }),
+        }));
+        expect(managedApi.startLocalLogin).not.toHaveBeenCalled();
+        expect(managedApi.create).not.toHaveBeenCalled();
+        expect(window.localStorage.getItem(ONBOARDING_STORAGE_KEY) ?? "").not.toContain(key);
+        if (status === "pass") {
+          expect(mockAgentsApi.hire).toHaveBeenCalled();
+          const payload = (mockAgentsApi.hire.mock.calls.at(-1) as unknown[])[1] as { adapterType: string };
+          expect(payload.adapterType).toBe("noverhead_node");
+          expect(JSON.stringify(payload)).not.toContain(key);
+          expect(document.body.textContent).toContain("Ada is ready to work!");
+        } else {
+          expect(mockAgentsApi.hire).not.toHaveBeenCalled();
+          expect(document.body.textContent).toContain("Node probe result");
+        }
+      } finally { await act(async () => root.unmount()); }
+    });
 
     it("blocks the hire on a warn result that holds adapter_auth_missing, and shows the returned checks", async () => {
       mockAgentsApi.testEnvironment.mockResolvedValue({

@@ -142,6 +142,7 @@ import { assertExternalAdapterCodeAllowed } from "../services/adapter-code-polic
 import { NativeEnvironmentProbeCleanupError } from "../vendor/paperclip-runner/index.js";
 import { processAdapter } from "./process/index.js";
 import { httpAdapter } from "./http/index.js";
+import { createNOverheadNodeAdapter } from "./noverhead-node.js";
 import {
   DEFAULT_OPENCODE_RUNNER_MODEL,
   PaperclipRunnerProviderProfileError,
@@ -983,6 +984,8 @@ function registerBuiltInAdapters() {
     paperclipRunnerAdapter,
     openCodeLocalAdapter,
     piLocalAdapter,
+    createNOverheadNodeAdapter({ ...piLocalAdapter,
+      getRuntimeCommandSpec: config => buildNpmRuntimeCommandSpec(config, "pi", "@earendil-works/pi-coding-agent@0.74.0") }),
     cursorCloudAdapter,
     cursorLocalAdapter,
     geminiLocalAdapter,
