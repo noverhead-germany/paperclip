@@ -76,6 +76,30 @@ not automatic. Other providers, remote agent environments and federation remain
 outside this increment. General architecture/runbook ownership remains in the
 existing NOverhead Wiki repository.
 
+## Local production build resources
+
+TypeScript 7 launches a native Go compiler, so the pre-existing `NODE_OPTIONS`
+heap setting does not constrain the server compiler. The Docker server build
+uses `PAPERCLIP_TSC_MEMORY_LIMIT=2GiB` and `PAPERCLIP_TSC_CPU_LIMIT=2` as defaults,
+passed through the standard Go `GOMEMLIMIT` and `GOMAXPROCS` variables for that
+build command only. The memory setting is a soft Go GC target, not a container
+memory limit. Larger builders can override the Docker build arguments. These
+settings do not enter the production runtime.
+
+The Go target alone did not suffice: a controlled compiler run exceeded 5 GiB
+resident memory and was stopped. The installed compiler's documented
+`--singleThreaded` mode then passed the full server `tsc --noEmit` check with
+the same Go settings. The existing server build/typecheck scripts now use that
+native mode. Resident memory can still exceed the Go GC target; allow adequate
+headroom for other running services.
+
+This follows two local build interruptions with Docker Engine HTTP 500, WSL
+connection timeout and a VM near its 8 GiB budget. Task-owned build clients were
+stopped and the supported Docker Desktop restart recovered the existing stack.
+The precise kernel failure cause was not established; no volume/image reset,
+cache pruning or custom database repair was used. Run only one production build
+at a time on this host and verify the existing services after recovery.
+
 ## Authenticated technical client
 
 Use Paperclip's supported Board/browser-approved CLI authentication to the exact

@@ -147,7 +147,13 @@ RUN pnpm --filter @paperclipai/plugin-sdk build
 # same ARG again for the runtime fallback; an ARG goes out of scope at the
 # end of its stage. Empty for local `docker build`, which then writes no stamp.
 ENV NODE_OPTIONS=--max-old-space-size=4096
-RUN pnpm --filter @paperclipai/server build
+# TypeScript 7 executes a native Go compiler; NODE_OPTIONS does not bound it.
+# Supplement the server scripts' native --singleThreaded mode with a soft GC
+# target and CPU budget. These affect the build only, not the production runtime.
+ARG PAPERCLIP_TSC_MEMORY_LIMIT=2GiB
+ARG PAPERCLIP_TSC_CPU_LIMIT=2
+RUN GOMEMLIMIT="${PAPERCLIP_TSC_MEMORY_LIMIT}" GOMAXPROCS="${PAPERCLIP_TSC_CPU_LIMIT}" \
+    pnpm --filter @paperclipai/server build
 RUN test -f server/dist/index.js || (echo "ERROR: server build output missing" && exit 1)
 RUN pnpm --filter @paperclipai/server build:runtime \
   && test -f server/dist-runtime/index.mjs || (echo "ERROR: server runtime bundle missing" && exit 1)
