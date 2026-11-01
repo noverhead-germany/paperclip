@@ -62,6 +62,15 @@ build/deployment and authenticated live issue/run results are recorded separatel
 in #261 and the NOverhead rollout record. Do not infer live acceptance from a
 green UI test or model-list response.
 
+An additional regression confirmed that selecting Node must not overwrite the
+previous Claude credential-mode choice. Node's bearer-only mode is derived for
+that source; returning through the regular Back/source-selection flow restores
+the prior subscription or API-key mode and clears the typed Node credential.
+The subscription case failed before the correction. After correcting it, UI
+TypeScript, the production UI build and all 198 scoped UI tests passed. The test
+first attempted a source click during the collapsed phase; it was corrected to
+exercise the supported Back transition before isolating the product failure.
+
 The existing Node bearer lifetime is at most 24 hours; renewal is deliberate,
 not automatic. Other providers, remote agent environments and federation remain
 outside this increment. General architecture/runbook ownership remains in the

@@ -975,6 +975,19 @@ describe("OnboardingWizard restore-gate (stale localStorage across accounts)", (
       return { root, clickByText };
     }
 
+    it.each([false, true])("preserves the previous Claude credential mode after visiting Node: api=%s", async useApiKeys => {
+      const { root, clickByText } = await openConnectStep({ source: "noverhead_node", useApiKeys });
+      try {
+        await act(async () => setControlledValue(document.body.querySelector('input[aria-label="Node bearer token"]')!, "node-only-credential"));
+        await flushReact();
+        await clickByText(text => text === "Back");
+        await clickByText(text => text.startsWith("Claude"));
+        expect(document.body.querySelector(`button[aria-label="${useApiKeys ? "Use subscription instead" : "Use API key instead"}"]`)).not.toBeNull();
+        expect(document.body.querySelector('input[aria-label="Node bearer token"]')).toBeNull();
+        if (useApiKeys) expect((document.body.querySelector('input[aria-label="API key"]') as HTMLInputElement).value).toBe("");
+      } finally { await act(async () => root.unmount()); }
+    });
+
     it.each(["pass", "fail"] as const)("requires the real Node probe before ordinary onboarding completion: %s", async status => {
       const key = "node-scoped-test-token";
       mockSecretsApi.createUserSecretDefinition.mockResolvedValue({ id: "node-key-definition" });

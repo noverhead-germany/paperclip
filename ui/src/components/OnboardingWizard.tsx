@@ -3008,7 +3008,6 @@ function OnboardingWizardInner({
                         setAdapterType(id);
                         if (id === "noverhead_node" || adapterType === "noverhead_node") setApiKey("");
                         if (id === "noverhead_node") {
-                          setCredentialMode("api");
                           setUrl("http://node:18766/v1");
                           setModel("noverhead/node-default");
                         }
