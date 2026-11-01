@@ -71,3 +71,31 @@ publish/ and tools/PaperclipExport/ directories. The partial archival copy is
 retained. An atomic directory move then returned access denied. No worktree
 registration, branch or source directory was deleted. Do not claim the final
 WorkSpace relocation or single-checkout acceptance until separately verified.
+
+## Verified consolidation checkpoint
+
+The primary repository was subsequently moved atomically to
+`C:/Users/NOverhead/WorkSpace/Paperclip`. Git repaired the linked-worktree
+metadata; the former master checkout was detached, then the primary checkout
+switched to existing master at 4eaa0e1139. The fork received that commit by a
+normal fast-forward push and its live ref was verified.
+
+All five linked checkouts are now inactive preserved file directories at
+their original paths. Their .git marker files and full worktree metadata
+(including staged indexes) are stored under
+`D:/Backups/Paperclip-261-20261101`; stale registrations were pruned only after
+those backups and a complete canonical-master.bundle were verified. No source
+files, ignored artifacts, untracked exports or branch refs were removed.
+The scratch directory's rename remains denied, so its original path is kept
+as an archive rather than forcing a move. Its partial archival copy also stays.
+
+`git worktree list` now contains exactly one entry: the WorkSpace primary
+checkout on master. All other local branch refs remain for historical/PR
+preservation, not active development. The separate Paperclip-UBL repository
+is deployment evidence with dirty configuration, not a source checkout; it
+remains intact. The live Compose project's working directory is
+`WorkSpace/NOverhead/Provisioning/Local`, and Paperclip mounts only its named
+data volume. No live deployment or data migration occurred.
+
+Paket/workspace links are being rebuilt from the frozen upstream lockfile for
+the canonical path. This does not establish Node-onboarding or E2E acceptance.
