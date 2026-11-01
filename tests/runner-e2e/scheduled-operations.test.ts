@@ -19,7 +19,7 @@ it.each(["daily", "weekly"] as const)("runs the exact %s selection through one s
   const manifest = scheduledManifest({ ...input, cadence });
   const selected = selectRunnerExecutions(parseRunnerSelectors(manifest.executionIds.flatMap(id => ["--id", id])), runnerMatrix);
   expect(selected.map(row => row.id).sort()).toEqual([...scheduledSelection(cadence)].sort());
-  expect(manifest.limits).toMatchObject({ maxUsd: cadence === "daily" ? "20" : "100", maxConcurrent: 1, maxAttemptsPerExecution: 1 });
+  expect(manifest.limits).toMatchObject({ maxUsd: cadence === "daily" ? "20" : "100", maxRequests: cadence === "daily" ? 30 : 60, maxConcurrent: 1, maxAttemptsPerExecution: 1 });
   expect(Date.parse(manifest.limits.deadlineAt) - input.now).toBe(30 * 60_000);
   expect(scheduledMatrix(cadence).include).toHaveLength(1);
   expect(manifest.executionIds).toHaveLength(cadence === "daily" ? 2 : 4);
@@ -62,7 +62,8 @@ it("fails closed before paid work if disabled, missing project identity, or pref
     const prepared = await prepareScheduledCampaign(env, input.now);
     expect(prepared.manifest.limits.campaignId).toBe(prepared.campaignId);
     const forecast = JSON.parse(await readFile(path.join(path.dirname(prepared.manifestPath), "forecast.json"), "utf8"));
-    expect(forecast.measurements.historicalSuccessfulSelection).toEqual({ modelUsd: "0.427624800", summedAttemptMs: 72757 });
+    expect(forecast.measurements.historicalSuccessfulSelection).toEqual({ modelUsd: "0.428650100", summedAttemptMs: 107286 });
+    expect(forecast.measurements.historicalHostedSelection).toEqual({ modelUsd: "0.428650100", summedAttemptMs: 107286 });
     expect(forecast.measurements.hostedAttemptMs).toBeNull();
     expect(forecast.maxUsd).toBe("20");
     await expect(prepareScheduledCampaign(env, input.now)).rejects.toThrow("EEXIST");
@@ -74,4 +75,27 @@ it("rejects an overhead allowance that cannot leave room for a full selected req
   expensive.components[0]!.maxUsd = "13";
   expect(() => validateScheduledBudget({ ...input, overhead: expensive })).toThrow("insufficient allowance");
   expect(validateScheduledBudget({ ...input, overhead })).toMatchObject({ executionIds: scheduledSelection("daily") });
+});
+
+
+it.each(["daily", "weekly"] as const)("prepares %s with its own reviewed operating allowance", async cadence => {
+  const directory = await mkdtemp(path.join(tmpdir(), "eval-cadence-overhead-"));
+  const allowance = (value: string): EvalOperatingOverhead => ({ ...overhead, reference: `fixture-${value}`,
+    components: overhead.components.map(component => ({ ...component,
+      maxUsd: component.component === "observability" ? value : component.component === "artifact_storage" ? "1" : "0" })) });
+  const allowances = { daily: allowance("10"), weekly: allowance("20") };
+  const env = { EVAL_EVENT: "workflow_dispatch", EVAL_CADENCE: cadence, EVAL_OPERATIONS_ENABLED: "true",
+    GITHUB_RUN_ID: "123", GITHUB_RUN_ATTEMPT: "1", GITHUB_WORKSPACE: directory,
+    EVAL_OPERATING_OVERHEAD_JSON: JSON.stringify(allowances), EVAL_TEST_RUNNER: "ubuntu-latest",
+    PAPERCLIP_E2E_BRAINTRUST_PROJECT_ID: input.projectId };
+  try {
+    await expect(prepareScheduledCampaign({ ...env,
+      EVAL_OPERATING_OVERHEAD_JSON: JSON.stringify({ ...allowances, [cadence]: undefined }) }, input.now)).rejects.toThrow();
+    await expect(prepareScheduledCampaign({ ...env,
+      EVAL_OPERATING_OVERHEAD_JSON: JSON.stringify({ ...allowances, typo: allowances.daily }) }, input.now)).rejects.toThrow();
+    const prepared = await prepareScheduledCampaign(env, input.now);
+    expect(prepared.manifest.limits.overhead).toEqual(allowances[cadence]);
+    expect(prepared.manifest.limits.maxUsd).toBe(cadence === "daily" ? "20" : "100");
+    expect(prepared.manifest.executionIds).toEqual(scheduledSelection(cadence));
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });

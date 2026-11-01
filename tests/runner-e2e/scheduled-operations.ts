@@ -64,7 +64,7 @@ export function scheduledManifest(input: {
   const { executionIds, executions, models } = validateScheduledBudget(input);
   const manifest: EvalOperationsManifest = {
     version: 1, limits: { campaignId: input.campaignId, maxUsd: budget(input.cadence), overhead: input.overhead,
-      deadlineAt: new Date(input.now + 30 * 60_000).toISOString(), maxRequests: input.cadence === "daily" ? 60 : 120,
+      deadlineAt: new Date(input.now + 30 * 60_000).toISOString(), maxRequests: input.cadence === "daily" ? 30 : 60,
       maxConcurrent: 1, maxAttemptsPerExecution: 1 },
     ledgerPath: input.ledgerPath, executionIds, maxAttemptsPerExecution: 1, route: "braintrust", projectId: input.projectId,
     models,
@@ -87,15 +87,15 @@ export async function prepareScheduledCampaign(env: NodeJS.ProcessEnv, now = Dat
   const directory = path.join(env.GITHUB_WORKSPACE, "tests/runner-e2e/results/scheduled");
   const manifest = scheduledManifest({ cadence, campaignId, ledgerPath: path.join(directory, "ledger.jsonl"),
     projectId: env.PAPERCLIP_E2E_BRAINTRUST_PROJECT_ID ?? "", now, runAttempt: env.GITHUB_RUN_ATTEMPT ?? "",
-    overhead: scheduledOperatingOverhead(env.EVAL_OPERATING_OVERHEAD_JSON, env.EVAL_TEST_RUNNER, budget(cadence), now) });
+    overhead: scheduledOperatingOverhead(env.EVAL_OPERATING_OVERHEAD_JSON, env.EVAL_TEST_RUNNER, budget(cadence), now, cadence) });
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const manifestPath = path.join(directory, "manifest.json");
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600, flag: "wx" });
   const forecast = { cadence, executionIds: manifest.executionIds, maxUsd: manifest.limits.maxUsd,
     overhead: manifest.limits.overhead, budgetScope: "model requests plus declared operating overhead reservations",
     measurements: scheduledForecast(runnerMatrix.filter(execution => manifest.executionIds.includes(execution.id)), manifest.models),
-    basis: "Retained local pilot measurements; successful samples and matching configurations are reported separately",
-    uncertainty: "Incomplete provider receipts and no invoice reconciliation; estimates are not a guarantee",
+    basis: "Retained attempt measurements with per-sample hosts; historical and current-compatible totals remain separate",
+    uncertainty: "Sample coverage, definition drift and provider export precision limit the estimate; final invoices and operating reconciliation remain pending",
     maximumRequestReservations: manifest.models.map(model => ({ model: model.price.model,
       usd: evalRequestReservation({ ...model, apiKey: "forecast", mode: "braintrust" }) })),
     maximumMonthlyTotalAllowanceUsd: "1120", pricingExpiresAt: prices.expiresAt };
@@ -109,7 +109,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const cadence = scheduledCadence(process.env.EVAL_EVENT ?? "", process.env.EVAL_SCHEDULE ?? "", process.env.EVAL_CADENCE);
     if (!cadence || process.env.EVAL_OPERATIONS_ENABLED !== "true") throw new Error("Bounded eval operations are not enabled");
     const now = Date.now();
-    const overhead = scheduledOperatingOverhead(process.env.EVAL_OPERATING_OVERHEAD_JSON, process.env.EVAL_TEST_RUNNER, budget(cadence), now);
+    const overhead = scheduledOperatingOverhead(process.env.EVAL_OPERATING_OVERHEAD_JSON, process.env.EVAL_TEST_RUNNER, budget(cadence), now, cadence);
     validateScheduledBudget({ cadence, overhead, now });
     console.log(JSON.stringify({ ...scheduledMatrix(cadence), overhead }));
   } else if (command === "prepare") {

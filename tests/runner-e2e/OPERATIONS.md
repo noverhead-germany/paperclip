@@ -11,11 +11,13 @@ Eval audit, and remaining activation gaps.
 
 ## Supported admission
 
-The initial path admits local `core-compatibility` and `feedback-persistence` cells for `runner-codex`,
-`runner-acpx-claude`, `legacy-codex`, and `legacy-claude`. Each cell must have one
-provider credential and an exact priced model. Other suites, remote environments,
-subscription profiles, hosted tools, multimodal inputs, premium service modes,
-and separate judges fail admission. This whitelist is implementation scope, not
+The bounded path admits local `core-compatibility` and `feedback-persistence` cells
+for `runner-codex`, `runner-acpx-claude`, `legacy-codex`, and `legacy-claude`.
+Daytona admits the two native profiles in those suites when the manifest declares
+`remoteGateway: "cloudflare"`. Each cell needs one exact priced model and its
+provider credential; Daytona also needs its provider key. Other suites and remote
+routes, subscription profiles, hosted tools, multimodal inputs, premium service
+modes, and separate judges fail admission. This whitelist is implementation scope, not
 evidence that every admitted harness has passed live qualification.
 
 Before creating the journal or requesting credentials, manifest validation checks
@@ -156,12 +158,117 @@ keys. The server environment strips the gateway token and upstream credentials.
 
 Every upstream attempt reserves its maximum estimated charge in an fsynced
 journal before dispatch. Requests, retries, and cancelled calls retain distinct
-IDs. Unknown usage keeps the reservation held. One shared writer serializes
+IDs. Braintrust gateway requests include the reserved request ID, campaign,
+execution, attempt and phase as allowlisted `paperclip_eval_*` metadata in the
+SDK-compatible parent context. The private receipt saves that context before
+dispatch. A live hosted probe did not retain the propagated metadata, so this
+header alone does not prove lookup by request ID after a pre-header cancellation.
+The returned `x-bt-span-id`, when present, identifies the Braintrust log row's
+`id`; the stored `span_id` and `root_span_id` can differ. The private receipt's
+historical field name `gatewaySpanId` continues to hold that returned row ID.
+Direct provider routes receive no Braintrust context. Older receipts cannot
+acquire a missing gateway row ID from a time or session match.
+A matching logged row does not itself prove complete usage or final billing.
+Unknown usage keeps the reservation held. One shared writer serializes
 admission across cells, so concurrent requests cannot each spend the same remaining
 allowance. Campaign deadline, request count, and in-flight count are also enforced.
 Private request receipts retain transport IDs, response IDs, usage and cache TTLs,
 route/cache/failover evidence, and final accounting status without request bodies
 or credentials. Raw provider responses remain only in the normal private evidence.
+
+### Disconnects and gateway shutdown
+
+When an HTTP client disconnects, the gateway drains an already-dispatched
+provider response for at most five more seconds to retain its final usage.
+The original provider timeout and campaign deadline still apply; the grace
+period never extends either. No additional provider request or retry is made.
+An upload or identity lookup interrupted before dispatch is not sent upstream.
+Gateway shutdown immediately stops admission, disconnects clients, and waits
+for that same bounded drain. Repeated shutdown calls share the same completion.
+
+A private receipt records `clientDisconnected: true` and keeps the request
+outcome `cancelled`, even if a complete provider response arrives during drain.
+A disconnect during receipt or ledger persistence also saves the corrected
+cancellation outcome before completion.
+Final usage may then replace its existing hold with an estimate under the normal
+ledger rules. It does not change the product verdict or establish invoice
+settlement. If no complete usage arrives, the unknown hold remains. The provider
+may continue billing after an abort, so a grace timeout is not evidence of zero
+cost. Drain time belongs to launcher cleanup and can add up to five seconds per
+attempt; no historical receipt or hold is rewritten by this change.
+
+## Provisional completion and later reconciliation
+
+Recurring campaigns may finish with provisional accounting when every pending
+charge has an explicit reviewed bound, all requests have stopped, no receipts
+conflict, and known costs plus retained holds fit the campaign cap. Product,
+cleanup, feedback, trace and ingestion requirements still apply. Reports and
+Braintrust experiment metadata label accounting as `provisional`,
+`receipts_complete`, `blocked`, or `unavailable`. Receipt completeness is separate
+from invoice reconciliation. The original failed campaign remains failed; a
+later report or policy does not change its original result.
+
+The optional `provisionalBound` on a manifest model or operating component is:
+
+```json
+{
+  "version": 1,
+  "scope": "full_lifecycle",
+  "evidenceSha256": "SHA256_OF_RETAINED_REVIEWED_AUDIT",
+  "configurationSha256": "SHA256_OF_EXACT_REVIEWED_CONFIGURATION"
+}
+```
+
+These placeholders are invalid until replaced with actual lowercase SHA-256
+values. Use `costBoundConfigurationSha256` from `cost-bound-evidence.ts` for
+stable key-sorted JSON hashing. The model configuration contains `provider`,
+`mode` (the manifest route), `price`, `maximumInputTokens`,
+`maximumOutputTokens`, and `reservation` (the nine-decimal value from
+`evalRequestReservation`). An operating configuration contains allowance
+`reference`, `runner`, `verifiedAt`, `expiresAt`, optional `accountingReadiness`
+(only when present), and a `component` object with
+its `component`, `maxUsd`, and `reference`. Changing any of those values
+invalidates the approval hash. Evidence metadata itself is excluded from this
+configuration hash.
+
+An operator must retain and review the audit before configuring its hash.
+Hashes bind evidence and configuration; they do not prove the audit is true.
+A model audit must establish the provider's full context ceiling, all billable
+token prices and tiers, standard inference, and the route's billing behavior.
+The gateway enforces output limits and supported request shapes. An operating
+audit must cover setup, failed attempts, build time, publication, transfer,
+observability and the full retained-storage lifecycle, including uncertainty in
+resource deletion and invoice arrival. It must name the enforceable resource
+limits and rates that keep the whole component below `maxUsd`. A current-day
+usage estimate or an arbitrary contingency amount is insufficient. A zero bound
+also needs evidence. Keep raw audits private; public reports expose only counts
+and the existing journal checkpoint.
+
+The ledger retains bound evidence before model dispatch. Unexpected or missing
+Braintrust route confirmation, failover, a returned model mismatch, or observed
+usage above a declared limit disqualifies that request's bound. Provider usage
+normalization retains a separate input/output lower bound even when missing or
+contradictory cache counters prevent pricing. Malformed reported counts also
+disqualify a bound. In-flight
+requests, conflicts, pending charges above their bound, and campaign overruns
+still block completion. Gateway cancellation before route confirmation remains
+unqualified even if it retained an admission reservation. Later receipts remain
+the way to resolve it.
+
+Provisional completion never releases a reservation or manufactures a zero
+charge. A missing receipt stays unknown and holds its full bound, less any
+known partial amount, until a valid final receipt supersedes it. The existing
+receipt importer still requires complete billing/resource windows before it
+marks a receipt final. Later bills can reveal an overrun; this local journal
+cannot stop external billing. Reconcile the same retained journal after its
+billing windows close, regenerate its report, and inspect any overruns before
+admitting more work. Existing subscription costs remain separate from the
+incremental daily/weekly budgets.
+
+Old journals and reports remain readable. They gain no bound evidence by
+upgrade or by this policy; unresolved legacy charges still block. Existing
+configured allowances and price cards are not automatically qualified by the
+new optional field. Recurrence remains subject to its existing enable gates.
 
 ## Manifest
 
@@ -261,8 +368,10 @@ rejects ambiguous singular fields and routing values.
 
 Each relay allows at most 2,048 admitted exports, 8 MiB per request before and
 after decompression, 64 MiB of forwarded payloads, and four simultaneous exports.
-It also limits each attempt to 16,384 records and 256 MiB of expanded source
-JSON. This measurement includes the full decoded source plus each record in
+The default allowance limits each attempt to 4,096 records and 16 MiB of
+expanded source JSON. Historical receipts with up to 16,384 records and 256 MiB
+remain readable; controller callers may still supply explicit limits up to
+those maxima. This measurement includes the full decoded source plus each record in
 its own envelope with the shared resource and scope fields repeated. It counts
 span names, IDs, times, events, links and log bodies, not only routing attributes.
 Protobuf fields use the pinned OTLP v1.9 schema; unknown fields fail admission
@@ -290,12 +399,16 @@ This path currently supports the admitted local cells; remote transport remains
 unqualified.
 
 Scheduled experiment creation, grade insertion and summary retrieval share a
-60-second window, three-request cap, 4 MiB total payload allowance and eight-score
+60-second window, three-request cap, 4 MiB total payload allowance and fourteen-score
 cap. They run serially without automatic retry. Admission is persisted before
 dispatch in `<ledgerPath>.experiment-ingestion.jsonl`; uncertain responses retain
 their allowance and unresolved status. Reusing that file fails instead of
 resetting the budget. These limits cover the selected daily/weekly campaigns;
 the standalone experiment-import command does not use this transport budget.
+Each retained attempt contributes two deterministic grades, including failed
+grades. The cap supports seven attempts without dropping rows. Larger campaigns
+still fail closed. Historical receipts with the eight-score policy remain
+readable and keep their original limits and traffic counts.
 
 Private `ingestion-usage.json` binds all three receipt paths to the campaign's
 admitted attempts and ledger hash. Missing, malformed, unclosed or unresolved
@@ -305,7 +418,7 @@ or an invoice. Vendor charges remain unreconciled. The current two-attempt daily
 maximum is 132.125 MiB and the four-attempt weekly maximum is 260.25 MiB,
 including finalization and the campaign's experiment payload allowance. These
 bounds do not include other projects, standalone imports or retained storage.
-The corresponding expanded-source ceilings are 514 MiB daily and 1,028 MiB
+The corresponding default expanded-source ceilings are 34 MiB daily and 68 MiB
 weekly before the separate 4-MiB experiment allowance. These source measurements
 support a priced forecast; they are not Braintrust's processed-data meter or a
 vendor-enforced dollar limit. Gateway auto-logging is a separate input to that
@@ -333,8 +446,11 @@ attempt. Installing the ACP package alone does not satisfy this setup path.
 
 Bounded cases keep the gateway in the setup phase until the created agent's
 asynchronous lifecycle verification reaches ready. This wait uses the remaining
-attempt deadline, allows at most 45 seconds, and stops on an observed setup error
+attempt deadline, allows at most 45 seconds locally and the bounded attempt window
+for Daytona provisioning, and stops on an observed setup error
 or hold. The private `budgeted-setup.json` snapshot retains state transitions.
+Budgeted Daytona fixtures give the saved-account hello probe five minutes inside
+that attempt window; its former 90-second default could expire during cold startup.
 Only then does the case begin agent-phase accounting and create its task.
 Older evidence that advanced after fixture creation may label hello probes as
 agent cost. Its campaign totals still include those requests; retain that phase
@@ -360,7 +476,12 @@ the existing AWS/GitHub runner choice.
 
 Daily selects native Claude's marker and feedback-persistence cases with a shared
 $20 allowance. Weekly adds native Codex's two corresponding cases with a
-shared $100 allowance. Model requests and declared operating overhead share
+shared $100 allowance. Daily campaigns admit at most 30 model requests; weekly
+campaigns admit at most 60. The October 23 qualification campaigns used 10 model
+requests each. The largest observed native attempt exported 6,531,801 expanded
+source bytes and 2,455 records. The defaults retain headroom for those measured
+cases; exhausting a limit remains visible and never silently drops required
+evidence. Model requests and declared operating overhead share
 this limit. Each campaign runs sequentially in one job with one
 journal, one attempt per execution, zero automatic retries, a 30-minute request
 deadline and a finite request count. Codex's worst-case request reservation exceeds
@@ -375,8 +496,12 @@ maximum allowances, not forecasts of actual spending.
 This is an admission limit with retained reservations, not a reconciled invoice
 total or a provider-enforced billing limit.
 
-Before enabling recurrence, set `RUNNER_E2E_OPERATING_OVERHEAD_JSON` to a reviewed
-allowance with `version: 1`, an evidence `reference`, the actual `runner`
+Before enabling recurrence, set `RUNNER_E2E_OPERATING_OVERHEAD_JSON` to an object
+with `daily` and `weekly` reviewed allowances. The catalog selects the allowance
+for the actual trigger, then passes only that validated allowance to preparation.
+A missing selected cadence or unknown outer field fails admission. A single
+allowance remains supported when the same bounds fit both schedules. Each
+allowance has `version: 1`, an evidence `reference`, the actual `runner`
 (`github-hosted` for bounded schedules), and `verifiedAt`/`expiresAt` timestamps no more
 than 31 days apart. Its `components` array must contain exactly `ci_compute`,
 `artifact_storage`, `observability`, and `shared_subscription`. Each component
@@ -390,6 +515,13 @@ Under the current policy, `shared_subscription` may reserve zero for the
 existing Braintrust subscription with a reference to that policy and current
 plan evidence. Any newly incurred subscription or capacity charge needs its own
 incremental allocation; the existing fee must remain visible separately.
+
+Unscheduled local controllers use `runner: "local"` to retain their actual
+execution origin. The same component, cap, expiry and receipt rules apply. This
+label supplies no default zero charge and releases no reservation. Scheduled
+allowances still require `github-hosted`; a local allowance fails that gate. The
+separate hosted Runner controller enforces the same origin when admitting work.
+Historical manifest reads preserve their original label; they grant no new admission.
 
 The catalog checks that this allowance matches the selected runner, covers at
 least the next four hours, and leaves room for a full conservative model-request
@@ -406,8 +538,9 @@ lifecycles. They do not occupy model concurrency, but they count toward the
 finite charge-record limit. Resuming cannot change or drop them. Until matched
 cost observations arrive, the report shows them as unknown and keeps their
 allowance held; even a zero allowance does not claim a known zero charge.
-The existing finalizer reports incomplete accounting while these receipts are
-missing. Do not dismiss that finding to enable recurrence.
+The finalizer permits provisional completion only when each pending charge has
+explicit reviewed bound evidence as described below. Missing or unqualified
+bounds remain incomplete accounting; a reservation alone does not qualify.
 
 Reconcile a component through its existing request ID with provenance-bound
 `infrastructure` or `invoice` observations. Partial observations keep the
@@ -431,7 +564,9 @@ The collector uses the existing `gh` authentication and only reads
 revision and repository, reads every returned job/artifact page up to 1,000
 records per inventory, and rejects changed or incomplete inventories. It retains
 job identities, summed job seconds, run-start delay, artifact sizes and expiration
-dates. It omits arbitrary job names, artifact names and upstream responses.
+dates. Skipped jobs with a null or zero runner ID count as not started and use
+zero VM time. Started jobs still require a numeric runner identity. It omits
+arbitrary job names, artifact names and upstream responses.
 Existing output files cannot be replaced. This is a current inventory, not an
 invoice: deleted artifacts are absent, compressed bytes are not billed
 byte-hours, job duration is not VM lifetime, and present repository visibility
@@ -486,16 +621,75 @@ does not open a new spending window, change limits, dispatch tests or rewrite
 previous records. Regenerate the campaign report from the same ledger afterward;
 an old report snapshot is not rewritten by an offline receipt import.
 
+### Compare retained Anthropic billing exports
+
+Use the read-only comparison command to repeat a provider-window comparison
+without dispatching a test or changing the cost journal:
+
+```sh
+node --import ./server/node_modules/tsx/dist/esm/index.mjs tests/runner-e2e/anthropic-billing-comparison.ts /private/path/comparison-config.json /private/path/new-comparison.json
+```
+
+The private configuration has this shape. `apiKeyLabel` is the label in the CSV,
+not an API credential. Copy `sourceDataAsOf` from the provider's reporting view.
+Use absolute input paths and retain the original exported CSV bytes.
+
+```json
+{
+  "version": 1,
+  "manifest": "/private/path/manifest.json",
+  "ledger": "/private/path/ledger.jsonl",
+  "usageExport": "/private/path/claude-usage.csv",
+  "costExport": "/private/path/claude-cost.csv",
+  "workspace": "Dedicated eval workspace",
+  "apiKeyLabel": "dedicated-eval-key",
+  "date": "2026-10-23",
+  "sourceDataAsOf": "2026-10-23T18:07:00Z"
+}
+```
+
+The first supported export shape is one Claude Sonnet 5 campaign, one workspace
+and key label, standard global inference, and context buckets at or below 200k.
+Usage rows are hourly; cost rows are daily. Both must cover the selected UTC
+date, and every selected journal request must have finished inside that day and
+before the source timestamp. The command rejects mixed scopes, duplicate rows,
+unsupported pricing dimensions, conflicting observations and damaged journals.
+A provider export may still be delayed after these checks pass. Matching scope
+labels do not establish exclusive use of a key or completeness of its export.
+
+The output records source hashes, the journal checkpoint, the reporting window,
+its provisional status, provider tokens priced with the retained manifest,
+rounded provider charges, and the retained request subtotal. Complete and
+partial token receipts remain distinct from dollar-cost completeness. Each known
+token category counts once per request even when the cost or other token fields
+are unknown. Missing-field counts remain explicit. Final token evidence takes
+precedence over partial evidence; equally strong contradictory values fail. Canceled requests without a
+returned model identity remain explicitly unconfirmed. The token and estimated
+USD differences can be positive or negative; neither is assigned to a request.
+Non-model charges are shown separately. The report does not add the provider
+total to the ledger subtotal or interpret rounded zero charges as free usage.
+
+The command creates a new mode-0600 output and refuses to replace an existing
+file. It makes no network or provider call, does not import receipts, and leaves
+all reservations and historical evidence intact. A comparison is supporting
+evidence for reconciliation, not a settled invoice or an admission override.
+Keep the config, raw exports and comparison private; they are not public report
+projections. Other providers and export shapes still require their own reviewed
+comparison path.
+
 The checked pricecard expires on November 19, 2026. Admission stops when the
 pricecard expires, the catalog model changes, the project is missing, or the
 preflight already exists. Review current official prices and context limits
 before updating `scheduled-prices.json`. `forecast.json` records the selected
 IDs, provenance-linked pilot measurements, compatibility gaps, uncertainty,
 reservations and price expiry. The historical daily/weekly successful model
-subtotals are $0.427624800/$0.791539400; they are not campaign bills. Setup model
+subtotals are $0.428650100/$0.793676500; they are not campaign bills. Setup model
 calls and attempt setup/teardown are included, while CI setup/build/queue and
 non-model charges are excluded. Current compatible totals stay unknown if any
-selected cell lacks a matching measurement. Hosted timing is still unmeasured.
+selected cell lacks a matching measurement. The historical hosted daily selection took 107.286 summed attempt seconds.
+The weekly Codex samples ran locally; a complete hosted weekly total remains
+unknown. Measurement hosts form separate cohorts. The original hosted workflow
+failed during report dependency setup after both worker cases passed.
 Per-cell medians describe only the retained samples; P95 requires at least 20
 matching samples and does not establish reliability. See
 [measurement provenance and limitations](OPERATIONS-COVERAGE.md#initial-cadence).
@@ -515,8 +709,8 @@ explicit, unbounded qualification path and does not inherit these allowances.
 
 After execution, deterministic review dismisses only exact synthetic feedback
 bodies corroborated by all feedback-persistence graders. Novel feedback remains
-`needs_investigation`; no extra model call is made. Missing accounting, unresolved
-receipts, feedback collection/submission failures, novel feedback, export failure
+`needs_investigation`; no extra model call is made. Missing accounting, unbounded
+pending charges, conflicts, spending overruns, feedback collection/submission failures, novel feedback, export failure
 and incomplete experiment import or indexing fail the job with bounded diagnostic codes.
 Successful unchanged runs produce artifacts without posting messages. GitHub's
 workflow failure notifications remain the operator's notification channel.
@@ -561,6 +755,24 @@ not distinct provider requests or charges. Codex exports can be high volume and
 Braintrust can double-count native/log observations; use the deduplicated gateway
 ledger as the estimate authority. Private indexing receipts contain only counts,
 identities and verification status, without trace contents or credentials.
+
+Scheduled finalization separately verifies every non-infrastructure request in
+the campaign journal against its private gateway receipt. It queries Braintrust
+by row `id`, checks the expected provider and model, and retains the actual span
+and trace IDs in `gateway-indexing-receipt.json`. Setup, failed and canceled
+requests remain in the denominator. Missing receipts, missing row IDs, duplicate
+row attribution, conflicting records and query errors fail the gateway coverage
+gate. A receipt or journal change during inspection also prevents verification.
+The file reports whether campaign metadata was retained, independently of the
+receipt-to-row match. It contains no prompts, responses or credentials.
+
+Each lookup batches at most 100 rows, makes at most three rounds, and has a
+45-second deadline. It performs no inference, writes no vendor records, changes
+no journal amounts and releases no holds. The findings include
+`gatewayIndexVerification`; a missing match is `gateway_indexing_incomplete`.
+This verifies stored identity and coverage, not provider billing or automatic
+nesting of gateway spans under native attempt traces. Those remain separate
+qualification requirements.
 
 ## Inspection and limits
 
@@ -700,8 +912,83 @@ launch manifests must use the adopted cap. The migration cannot extend an expire
 deadline, change an existing cap, or replenish an allowance. An interrupted append
 remains an accounting failure and must be recovered before more paid work.
 
-The explicit local `feedback-persistence` native Claude/Codex cells also accept
-an operations manifest. They use the same metered connection, prices, campaign
+The explicit `feedback-persistence` native Claude/Codex cells on local and Daytona
+execution also accept an operations manifest. Remote cells require the Cloudflare
+gateway declaration and immutable image. They use the same metered connection, prices, campaign
 journal, setup boundary, and durable attempt allowance as core compatibility.
 Collection and the independent saved-evidence oracle require no additional
 model call. The synthetic items need review as test data, not product incidents.
+
+
+### Qualify model spend while operating reconciliation is pending
+
+Set `accountingReadiness: "model_requests"` on the reviewed allowance to use
+complete model receipts as the scheduled readiness gate. This is an explicit
+operator policy. The report retains the full-accounting status, operating
+reservations and model-readiness status separately. It does not release any
+historical hold or certify a full-lifecycle vendor cost bound. Missing model
+receipts, conflicts, active requests, excess commitments, and the existing
+product, cleanup, feedback and trace checks still fail qualification.
+
+
+### Explicit bounded Daytona gateway qualification
+
+A manual manifest can set `remoteGateway: "cloudflare"` for the native Codex
+or Claude marker/feedback Daytona cells. Install `cloudflared` on the controller
+PATH, or set `PAPERCLIP_EVAL_CLOUDFLARED` to its executable path. Empty overrides
+use the PATH default. The parent starts its existing model
+gateway and native OTLP relay, then exposes only their authenticated endpoints
+through one owned HTTPS quick tunnel. It verifies a fresh health nonce before
+fixture setup, waits up to 120 seconds for registration and 120 seconds for
+public readiness, and does not retry tunnel creation or provider work.
+
+Only attempt-scoped tokens leave the controller. Provider and Braintrust keys
+stay in the parent; the fixture/server retains the existing Daytona provisioning
+credential separately. The model gateway still enforces its campaign allowance,
+request count, concurrency, deadline and receipt journal. The bridge streams
+responses and preserves terminal-usage draining after a client disconnect.
+The tunnel receives no ambient provider credentials or Cloudflare config. Its
+exposure closes at the campaign deadline or four hours after startup, whichever
+comes first, and on attempt cleanup. Owned gateway,
+relay and tunnel cleanup failures remain failures. A configured remote route
+is not live acceptance; retain the actual Daytona result, cleanup, feedback,
+native traces and complete model receipts.
+
+The Daytona image runs Linux/x64. ARM or macOS controllers use the image's
+verified daemon by default; only an explicit cross-compiled remote override
+replaces it.
+
+Daily and weekly selections remain local. This explicit remote option adds no
+scheduled coverage or public report publication.
+
+The worker generates the attempt's trace parent. The relay validates the project
+in both the header and payload, but does not pin that worker-generated parent.
+Treat the attempt OTLP token as authority to submit trace attribution within
+this eval project. Keep it limited to the trusted harness/provider runtime;
+never expose it to test prompts or unrelated clients. The project check is not
+an attempt-isolation guarantee. Indexing verification is a separate retained
+or scheduled check; the manual launcher alone does not perform it.
+
+### Hosted report dependencies
+
+The trusted report job applies a reviewed `report-lock.patch` before its frozen
+install. `report-lock.json` pins the input lock, patch and resulting lock hashes.
+This updates existing patch identities and the already declared yaml dependency
+without registry resolution. The worker target and its lock artifact never
+control report dependencies. An already-reviewed output lock is used unchanged. An unknown committed lock fails before install;
+review the correction with dependency changes. The existing lockfile-refresh bot runs
+`prepare-report-lock.mjs --refresh` and includes the correction and hashes in its
+lockfile PR. The lockfile bot merges that PR without checks or code-owner review
+when every added package version is at least 3 days old on npm; otherwise the PR
+waits for a maintainer (see `doc/RELEASE-AUTOMATION-SETUP.md` §8.1). The bot
+merges only the commit the workflow generated. It refuses to bless an
+unrecognized committed lock. Paid authorization
+and report jobs still apply only the reviewed offline correction. The original
+failed run remains failed when retained evidence gets a new presentation.
+
+The trusted authorization job checks this correction and validates the frozen
+lock against current dependency manifests offline before catalog/build and paid
+work. This check resolves no packages and runs no lifecycle scripts. Unknown dependency locks fail before model admission. Manual history
+publication applies the same correction before its frozen install. Qualification
+image builds apply it only when target and workflow revisions match; a different
+target keeps its own lock and does not require these reporting helper files.

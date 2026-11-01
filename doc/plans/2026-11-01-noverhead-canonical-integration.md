@@ -47,3 +47,27 @@ The current master already contains upstream custom-gateway onboarding
 (fbaf3c6ed2). Reuse its connection and environment-test gates when implementing
 NOverhead Node; a new tile alone must never count as connectivity. Complete
 canonical history integration and source-path checks before implementation.
+
+## Upstream merge verification
+
+Upstream 1a6017d6460267ad89d7e1784e2b521c28d8e9ac was merged after the
+first local merge. Three content conflicts were resolved by retaining the
+upstream durable-send/account ownership logic and using createUuid for IDs.
+The task pause refetch retains cached state; retry timing now belongs to the
+new upstream query client. Two inherited test assertions were changed to test
+that a refetch occurred rather than override the shared retry count.
+
+441 affected tests are green: the first run passed 437 and exposed four
+retry-count assertion failures; after the assertion adjustment all 218
+IssueDetail tests passed again. UUID, TaskChatComposer and IssueChatThread
+tests already passed in that first run. UI typecheck and production build
+passed on the upstream merge. Upstream itself contains whitespace warnings;
+the custom delta is checked separately against origin/master.
+
+Consolidation has not completed. An attempted PowerShell move of the scratch
+checkout stopped at a package link. Its tracked files were restored by a
+non-destructive copy; git status again shows only the original untracked
+publish/ and tools/PaperclipExport/ directories. The partial archival copy is
+retained. An atomic directory move then returned access denied. No worktree
+registration, branch or source directory was deleted. Do not claim the final
+WorkSpace relocation or single-checkout acceptance until separately verified.
