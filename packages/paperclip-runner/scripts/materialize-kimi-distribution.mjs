@@ -104,6 +104,16 @@ async function removePackageManagerLinks(root) {
   await rm(join(root, "node_modules/.package-lock.json"), { force: true });
 }
 
+export async function copyKimiDistributionManifests(lockDirectory, runtime) {
+  for (const name of ["package.json", "package-lock.json"]) {
+    const destination = join(runtime, name);
+    await copyFile(join(lockDirectory, name), destination);
+    // Windows Docker contexts make source files executable. These are data
+    // files; inheriting those bits changes the trusted native closure.
+    await chmod(destination, 0o644);
+  }
+}
+
 export async function buildKimiDistribution({ outputRoot, target = `${process.platform}-${process.arch}`, lockDirectory = join(packageRoot, "scripts/kimi-distribution"), nodeArchives = {}, checkCancelled = () => {}, signal }) {
   checkCancelled(); signal?.throwIfAborted();
   if (typeof outputRoot !== "string" || !isAbsolute(outputRoot)) throw new Error("Kimi distribution output must be absolute");
@@ -126,7 +136,7 @@ export async function buildKimiDistribution({ outputRoot, target = `${process.pl
     const buildNode = host === target ? installedNode : await nodeDistribution(staging, host, nodeArchives[host], environment, runOwned, signal);
     if ((await runOwned(buildNode.executable, ["--version"], { env: {}, timeout: 10_000 })).stdout.trim() !== `v${KIMI_NODE_VERSION}`) throw new Error("Kimi distribution build Node cannot execute");
     await mkdir(runtime);
-    for (const name of ["package.json", "package-lock.json"]) await copyFile(join(lockDirectory, name), join(runtime, name));
+    await copyKimiDistributionManifests(lockDirectory, runtime);
     await writeFile(join(runtime, ".npmrc"), "registry=https://registry.npmjs.org/\nignore-scripts=true\naudit=false\nfund=false\n");
     await writeFile(join(runtime, ".npmrc-global"), "");
     await runOwned(buildNode.executable, [buildNode.npm, ...kimiDistributionInstallCommand()], { cwd: runtime, env: environment, timeout: 300_000, maxBuffer: 4 * 1024 * 1024 });

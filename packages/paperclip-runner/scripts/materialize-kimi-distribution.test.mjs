@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { chmod, link, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, link, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
-import { assertKimiNodeSystemDependencies, buildKimiDistribution, kimiDistributionEnvironment, kimiDistributionInstallCommand, materializeKimiDistribution, runKimiBuildCommand, verifyLockedKimiPackageGraph } from "./materialize-kimi-distribution.mjs";
+import { assertKimiNodeSystemDependencies, buildKimiDistribution, copyKimiDistributionManifests, kimiDistributionEnvironment, kimiDistributionInstallCommand, materializeKimiDistribution, runKimiBuildCommand, verifyLockedKimiPackageGraph } from "./materialize-kimi-distribution.mjs";
 import { KIMI_DISTRIBUTION_LOCK_SHA256, KIMI_NODE_DISTRIBUTIONS } from "../src/drivers/acpx/kimi-closure-pins.ts";
 import { inventoryKimiRuntimeFiles, kimiRuntimeClosureDigest } from "../src/drivers/acpx/kimi-runtime-files.ts";
 
@@ -29,6 +29,22 @@ test("Kimi's portable graph pins public integrity and excludes lifecycle and opt
   assert.ok(kimiDistributionInstallCommand().includes("--omit=optional"));
   assert.ok(kimiDistributionInstallCommand().includes("--registry=https://registry.npmjs.org"));
   assert.deepEqual(Object.keys(KIMI_NODE_DISTRIBUTIONS).sort(), ["darwin-arm64", "linux-x64"]);
+});
+
+test("copied manifests preserve locked bytes without executable checkout bits", { skip: process.platform === "win32" }, async t => {
+  const { root, write } = await fixture(t);
+  const input = join(root, "input"), output = join(root, "output");
+  await mkdir(output);
+  for (const name of ["package.json", "package-lock.json"]) {
+    await write(`input/${name}`, `{ "name": "${name}" }\n`);
+    await chmod(join(input, name), 0o755);
+  }
+  await copyKimiDistributionManifests(input, output);
+  for (const name of ["package.json", "package-lock.json"]) {
+    assert.equal((await lstat(join(input, name))).mode & 0o777, 0o755);
+    assert.equal((await lstat(join(output, name))).mode & 0o777, 0o644);
+    assert.deepEqual(await readFile(join(output, name)), await readFile(join(input, name)));
+  }
 });
 
 test("distribution build admits network settings without provider keys or Node injection", () => {

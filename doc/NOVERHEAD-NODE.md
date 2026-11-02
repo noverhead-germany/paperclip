@@ -126,6 +126,36 @@ closure `713b1fdff42fb56a1518bdc084f181d70bee8ebadc3e4b1d76321ed9108c8410`
 This establishes the distribution correction; the subsequent production image,
 live onboarding and issue journey require their own verification.
 
+## Isolated Kimi packaging correction, 2026-11-02
+
+The next production gate rejected Kimi's native closure; no rollout followed.
+The bounded follow-up reproduced that exact error using only the Kimi
+materializer in a Linux container, with input manifest modes set to the observed
+Windows Docker-context mode `755`. No full Docker build or model call was used.
+
+The trusted Linux x64 pin originates unchanged in upstream commit
+`b866fa4bdc940469eb668d3ea7938e7039b442ec` (PR #18028): Kimi Code 2.3.3,
+Node 24.21.0, npm 11.19.0 and lock SHA-256
+`87f854ddd7f92254ccd8596b85962684ec176f92e93863771843bf416825f16b`.
+The relevant upstream files remain identical at `8ea240218d`.
+The registry's 2.3.3 tarball URL/integrity match the lock; latest 2.4.1 is not
+selected. The headless install verifies 33 packages and omits all 13 optional
+TUI/native packages. Node archive/executable and vendor/patched Kimi hashes pass
+their existing checks; no package or platform dependency drift was found.
+
+The reproduced closure was
+`364e354f8496ec1454c709b07d575b7328a1e4c6f3a30f33a74a26cf311ece28`.
+Normalizing only the copied `package.json` and `package-lock.json` to `644`
+restores the unchanged trusted closure
+`105d8394adbbc76a953a12cc51b5288eb940ad693291e584f6cdc6407213164d`.
+The corrected public materializer passed its real admission gate. Comparing all
+888 file entries before/after showed exactly those two executable-bit changes;
+every file hash and size stayed identical. Pins, lock and patch are unchanged.
+All 10 focused Kimi materializer tests and the generated ACPX attestation check
+passed. Private before/after receipts and full inventories are retained outside
+Git. Native Darwin execution, a new production build, rollout and Paperclip E2E
+were not run in this follow-up.
+
 ## Authenticated technical client
 
 Use Paperclip's supported Board/browser-approved CLI authentication to the exact
