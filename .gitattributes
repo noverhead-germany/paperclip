@@ -1,2 +1,2 @@
-patches/*.patch whitespace=-space-before-tab
+patches/*.patch text eol=lf whitespace=-space-before-tab
 packages/paperclip-runner/** text=auto eol=lf

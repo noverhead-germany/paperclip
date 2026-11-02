@@ -100,6 +100,19 @@ The precise kernel failure cause was not established; no volume/image reset,
 cache pruning or custom database repair was used. Run only one production build
 at a time on this host and verify the existing services after recovery.
 
+The first complete server/runtime build then reached provider-pack qualification
+and correctly rejected the Pi dependency security patch's bytes. Its Windows
+working copy had CRLF (`ccca47aa…`); the unchanged Git blob and LF-normalized
+bytes both match the reviewed SHA-256
+`5273a195b952f233336122842faaf650193c04f36b9359d20d4d63079b0ce814`.
+Root dependency patches now also retain LF through `.gitattributes`. No security
+pin, provider profile or patch content was changed. This failure remains part of
+the verification record rather than being hidden by a regenerated receipt.
+The materializer's existing tests passed 13/13 on Linux. The Windows attempt
+passed 10/13; the remaining tests require POSIX path separators, a supported
+Linux/Darwin target and symlink permissions. The test source was unchanged.
+The ACPX generated-profile/release-attestation check also passed unchanged.
+
 ## Authenticated technical client
 
 Use Paperclip's supported Board/browser-approved CLI authentication to the exact
