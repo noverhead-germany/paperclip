@@ -6,6 +6,12 @@ navigation: {"section":"Getting started and access","sectionOrder":10,"order":10
 
 An operator can start an instance, create a company, configure its first agent, and reach a real first task. Instance setup and company onboarding are separate steps.
 
+An authenticated organization owner can use the dashboard with zero agents and
+without a model connection. Agent setup is optional: choose "Create one here"
+on the dashboard or open the organization's onboarding route. Loading or
+refreshing an empty agent list does not open the wizard. Authentication and
+organization-access checks still apply.
+
 Feature ID: `onboarding`.
 
 Implementation: [web wizard](../../ui/src/components/OnboardingWizard.tsx), [CLI setup](../../cli/src/commands/onboard.ts).
@@ -15,7 +21,7 @@ Agent access: [companion](../agent-access-map/onboarding.md).
 ## Sub-features
 
 - `instance`: `onboarding/instance` — choose local instance configuration and start the server.
-- `company`: `onboarding/company` — create a company with its identity and initial agent.
+- `company`: `onboarding/company` — create a company with its identity and optionally configure its initial agent.
 - `adapter`: `onboarding/adapter` — choose an available harness, model, account, and execution environment.
 - `first-task`: `onboarding/first-task` — leave setup with a task whose execution or missing prerequisite is visible.
 

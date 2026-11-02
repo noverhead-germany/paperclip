@@ -158,6 +158,20 @@ were not run in this follow-up.
 
 ## Authenticated technical client
 
+Agent/model onboarding is optional for an authenticated organization owner.
+The dashboard remains available with zero agents; the first-agent action and
+`/<company-prefix>/onboarding` still launch the existing wizard. The former
+dashboard effect that opened it as soon as an empty agent query resolved has
+been removed. The NOverhead Node option, real connection checks, secret binding
+and hire flow are unchanged. Controlled component regressions cover sign-in to
+the zero-agent dashboard, refetch/remount, explicit setup and denied board access.
+Validation: 32 dashboard/routing regressions and 212 existing login, launcher and
+wizard tests passed; UI typecheck, production UI build and map structure checks
+passed. These are controlled component tests, not a live Owner browser session.
+The previously authorized full Docker build started from `e0e3db11be` before this
+UI change and does not include it. No additional full Docker build was started
+for the optional-onboarding change.
+
 Use Paperclip's supported Board/browser-approved CLI authentication to the exact
 local origin, after Owner authentication. Never copy a token between origins,
 alter database role/credential tables, or downgrade authenticated deployment

@@ -120,46 +120,6 @@ export function resolveRouteOnboardingOptions(params: {
 }
 
 /**
- * Whether a company with no agents should be sent to onboarding rather than
- * left on the dashboard.
- *
- * A company with no agent cannot do anything: no runs, no tasks, nothing to
- * show. The dashboard already says so in a banner with a "Create one here"
- * link, which asks the customer to notice a problem the product could simply
- * fix for them.
- *
- * It also closes the gap a Cloud-provisioned stack falls into. Cloud creates
- * the company before the tenant boots, so `shouldRedirectCompanylessRouteToOnboarding`
- * never fires — a seeded customer arrives at an empty dashboard having just
- * answered a signup flow, and nothing routes them onward.
- *
- * `agentsLoaded` is required rather than optional on purpose. Callers hold
- * agents as `Agent[] | undefined` while the query is in flight, and an absent
- * list reads exactly like an empty one — redirecting on that would bounce
- * every user through onboarding on each cold load.
- *
- * `agentsRefreshing` covers the other way a count of zero lies: a cached list
- * that is being refetched. The wizard hires the first agent and then lands on
- * the first task; a dashboard reached from there can hold the empty list it
- * cached before the hire, with the refetch still in flight. Offering on that
- * list reopens "Create your first agent" for a company that just got one,
- * and the customer walks the agent and model steps a second time.
- */
-export function shouldRouteAgentlessCompanyToOnboarding(params: {
-  pathname: string;
-  agentsLoaded: boolean;
-  agentsRefreshing?: boolean;
-  agentCount: number;
-}): boolean {
-  if (!params.agentsLoaded) return false;
-  if (params.agentsRefreshing) return false;
-  if (params.agentCount > 0) return false;
-  // Already there. Redirecting onto the path we are on is the loop that
-  // "finished the wizard but created no agent" would otherwise spin in.
-  return !isOnboardingPath(params.pathname);
-}
-
-/**
  * Whether the wizard's Back button is offered on the current step.
  *
  * A run never walks back behind the step it entered on: those steps either do
