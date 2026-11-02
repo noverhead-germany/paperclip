@@ -179,3 +179,30 @@ mode. Board credentials retain their user's permissions and are operator
 credentials; do not pass an Owner Board key to the agent. Agent API keys and the
 normal per-run JWT remain company/agent scoped. Verify Company, Agent and Issue
 access with that actual principal before using the API for an acceptance run.
+
+## Production attempt and runtime stop, 2026-11-02
+
+Exactly one full production build from `e0e3db11be5c47e74a71439f92ecc52d4d176482`
+completed, including all provider-pack integrity gates. Its image ID is
+`sha256:7142c501e3bb45d77f5ea6ee78e95514e25b5a7c690e99e7c0640fe88f084cce`
+(`noverhead-paperclip:261-verified`, BuildKit `4y9puqsn4tv5d6vdyyaygf1zm`).
+The original image reference was retained as `noverhead-paperclip:rollback-261-e0e3`.
+
+The image-verification container remained in `Created`; both provider-container
+restart requests also stalled. The existing Paperclip still answered HTTP 200
+at that point. One supported `docker desktop restart --timeout 180` was attempted
+to restore normal container starts. It failed with `Docker Desktop is still
+starting: context deadline exceeded`; pending starts returned EOF/daemon-pipe
+errors. Hermes/OpenClaw restoration did not complete. Paperclip's local health
+endpoint was unreachable at 12:18 CET. No further infrastructure repair was
+attempted after that bounded recovery failed.
+
+The optional-dashboard UI fix is committed separately as
+`7df6c81e1fe16167f30f8c9626b851ace1a6d7f1`. Its release assets carry that commit;
+244 controlled UI regressions, UI typecheck/build and map checks passed. It is
+not included in the earlier full image. A UI-only image layer was prepared but
+not built or deployed. No second full build, data deletion, volume reset,
+database migration, Paperclip image switch or real E2E issue occurred. The
+offline volume archive has not yet been taken. Live Owner-dashboard acceptance
+and #261's agent E2E remain unverified, pending separately authorized Docker
+runtime recovery and the controlled rollout.
