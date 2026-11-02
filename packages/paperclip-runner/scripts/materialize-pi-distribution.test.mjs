@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdtemp, mkdir, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
-import { assertPiNodeSystemDependencies, downloadPinnedPiNodeArchive, PI_BRACE_SECURITY_PATCH_SHA256, PI_DISTRIBUTION_PINS, materializePiDistribution, resolvePiBundledNpm, piDistributionInstallCommand, verifyLockedPiPackageGraph, writePiDistributionManifest } from "./materialize-pi-distribution.mjs";
+import { assertPiNodeSystemDependencies, copyPiDistributionManifests, downloadPinnedPiNodeArchive, PI_BRACE_SECURITY_PATCH_SHA256, PI_DISTRIBUTION_PINS, materializePiDistribution, resolvePiBundledNpm, piDistributionInstallCommand, verifyLockedPiPackageGraph, writePiDistributionManifest } from "./materialize-pi-distribution.mjs";
 import { verifyPiRuntimeManifest } from "../src/drivers/acpx/pi-verified-runtime.ts";
 
 async function fixture(t) {
@@ -48,6 +48,23 @@ test("distribution lock closes exact wrapper, SDK and upstream Pi graph with int
   assert.ok(piDistributionInstallCommand().includes("--ignore-scripts"));
   assert.ok(piDistributionInstallCommand().includes("--include=optional"));
   assert.equal(piDistributionInstallCommand()[0], "ci");
+});
+
+test("distribution manifests keep pinned bytes without executable checkout bits", { skip: process.platform === "win32" }, async (t) => {
+  const { root, write } = await fixture(t);
+  const input = join(root, "input");
+  const output = join(root, "output");
+  await mkdir(output);
+  for (const name of ["package.json", "package-lock.json"]) {
+    await write(`input/${name}`, `{ "name": "${name}" }\n`);
+    await chmod(join(input, name), 0o755);
+  }
+  await copyPiDistributionManifests(input, output);
+  for (const name of ["package.json", "package-lock.json"]) {
+    assert.equal((await lstat(join(input, name))).mode & 0o777, 0o755);
+    assert.equal((await lstat(join(output, name))).mode & 0o777, 0o644);
+    assert.deepEqual(await readFile(join(output, name)), await readFile(join(input, name)));
+  }
 });
 
 test("only the exact brace-expansion security correction may differ from Pi's shrinkwrap", async (t) => {

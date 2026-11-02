@@ -113,6 +113,19 @@ passed 10/13; the remaining tests require POSIX path separators, a supported
 Linux/Darwin target and symlink permissions. The test source was unchanged.
 The ACPX generated-profile/release-attestation check also passed unchanged.
 
+The next real production attempt passed that patch check, the full server build
+and runtime bundle, then rejected Pi's native closure. A diagnostic stage in the
+same Docker context showed both isolated package manifests had mode `755`.
+`copyFile` preserved these Windows-context executable bits in the runtime,
+whose trusted closure includes file modes. The materializer now sets only these
+two copied data files to `644`, preserving their exact locked bytes. All 14
+materializer tests pass on Linux, including the executable-input regression.
+An actual complete Linux x64 materialization then matched the unchanged trusted
+closure `713b1fdff42fb56a1518bdc084f181d70bee8ebadc3e4b1d76321ed9108c8410`
+(150 packages, Node 24.21.0). No security pin or profile was regenerated.
+This establishes the distribution correction; the subsequent production image,
+live onboarding and issue journey require their own verification.
+
 ## Authenticated technical client
 
 Use Paperclip's supported Board/browser-approved CLI authentication to the exact
