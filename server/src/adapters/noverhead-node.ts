@@ -1,4 +1,4 @@
-import { execute as executePi, testEnvironment as testPi, preparePiRuntimeConfig } from "@paperclipai/adapter-pi-local/server";
+import { execute as executePi } from "@paperclipai/adapter-pi-local/server";
 import type { ServerAdapterModule } from "./types.js";
 
 export const NODE_MODEL = "noverhead/node-default";
@@ -59,13 +59,25 @@ export function createNOverheadNodeAdapter(pi: ServerAdapterModule): ServerAdapt
         if (!response.ok) throw new Error(`Node authorization/configuration check failed (HTTP ${response.status}).`);
         const inventory = await response.json() as { data?: Array<{ id: string }> };
         if (!inventory.data?.some(model => model.id === "node-default")) throw new Error("Node does not advertise its configured model.");
-        const prepared = await preparePiRuntimeConfig({ env });
-        try {
-          const result = await testPi({ ...ctx, config: { ...config, env: prepared.env } });
-          const passed = result.checks.some(check => check.code === "pi_hello_probe_passed" && check.level === "info");
-          return { ...result, adapterType: "noverhead_node", status: passed && result.status !== "fail" ? "pass" : "fail",
-            checks: [...result.checks, { code: "noverhead_node_authenticated", level: "info", message: "Node authenticated the scoped credential and advertised its configured model." }] };
-        } finally { await prepared.cleanup(); }
+        const inference = await fetch(`${providers.noverhead.baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${env[NODE_KEY]}`, "content-type": "application/json" },
+          body: JSON.stringify({
+            model: "node-default",
+            messages: [{ role: "user", content: "Reply with the single word hello." }],
+            max_tokens: 16,
+          }),
+          signal: AbortSignal.timeout(180_000),
+          redirect: "error",
+        });
+        if (!inference.ok) throw new Error(`Node inference check failed (HTTP ${inference.status}).`);
+        const completion = await inference.json() as { choices?: Array<{ message?: { content?: unknown } }> };
+        const content = completion.choices?.[0]?.message?.content;
+        if (typeof content !== "string" || !content.trim()) throw new Error("Node inference check returned no assistant response.");
+        return { adapterType: "noverhead_node", status: "pass", testedAt: new Date().toISOString(), checks: [
+          { code: "noverhead_node_authenticated", level: "info", message: "Node authenticated the scoped credential and advertised its configured model." },
+          { code: "noverhead_node_inference_passed", level: "info", message: "Node completed an authenticated chat request using its configured model." },
+        ] };
       } catch (error) {
         // Never include provider payloads or the resolved token in diagnostics.
         return { adapterType: "noverhead_node", status: "fail", testedAt: new Date().toISOString(),
