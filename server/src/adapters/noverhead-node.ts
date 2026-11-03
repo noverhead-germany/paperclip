@@ -3,11 +3,12 @@ import type { ServerAdapterModule } from "./types.js";
 
 export const NODE_MODEL = "noverhead/node-default";
 export const NODE_KEY = "NOVERHEAD_NODE_API_KEY";
+export const NODE_DEFAULT_URL = "http://node:18766/v1";
 
 /** A configured Pi preset; Node owns provider/model selection and authorization. */
 export function nodeAdapterConfig(config: Record<string, unknown>): Record<string, unknown> {
   const address = typeof config.url === "string" && config.url.trim()
-    ? config.url.trim() : process.env.NOVERHEAD_NODE_URL ?? "http://node:18766/v1";
+    ? config.url.trim() : process.env.NOVERHEAD_NODE_URL ?? NODE_DEFAULT_URL;
   const url = new URL(address);
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash
     || !["node", "localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
@@ -73,6 +74,16 @@ export function createNOverheadNodeAdapter(pi: ServerAdapterModule): ServerAdapt
               ? error.message : "Could not connect to NOverhead Node. Check its address, bearer grant and Pi installation." }] };
       }
     },
+    getConfigSchema: () => ({
+      fields: [{
+        key: "url",
+        label: "NOverhead Node endpoint",
+        type: "text",
+        default: process.env.NOVERHEAD_NODE_URL?.trim() || NODE_DEFAULT_URL,
+        required: true,
+        hint: "OpenAI-compatible /v1 endpoint for the local NOverhead Node. The API key is managed separately as a Paperclip secret.",
+      }],
+    }),
     agentConfigurationDoc: "# NOverhead Node\nUses Pi and the OpenAI-compatible Node gateway. Set url to the local Node /v1 endpoint and bind NOVERHEAD_NODE_API_KEY through Paperclip secrets. Node selects the provider and model. No Claude/OpenAI account is required.",
   };
 }

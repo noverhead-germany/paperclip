@@ -11,6 +11,7 @@ import { hermesGatewayUIAdapter } from "./hermes-gateway";
 import { hermesLocalUIAdapter } from "./hermes-local";
 import { openCodeLocalUIAdapter } from "./opencode-local";
 import { piLocalUIAdapter } from "./pi-local";
+import { noverheadNodeUIAdapter } from "./noverhead-node";
 import { openClawGatewayUIAdapter } from "./openclaw-gateway";
 import { processUIAdapter } from "./process";
 import { httpUIAdapter } from "./http";
@@ -65,9 +66,7 @@ function registerBuiltInUIAdapters() {
     hermesLocalUIAdapter,
     openCodeLocalUIAdapter,
     piLocalUIAdapter,
-    { ...piLocalUIAdapter, type: "noverhead_node", label: "NOverhead Node",
-      buildAdapterConfig: (values: Parameters<UIAdapterModule["buildAdapterConfig"]>[0]) => ({ ...piLocalUIAdapter.buildAdapterConfig(values),
-        model: "noverhead/node-default", ...(values.url ? { url: values.url } : {}) }) },
+    noverheadNodeUIAdapter,
     cursorLocalUIAdapter,
     openClawGatewayUIAdapter,
     processUIAdapter,

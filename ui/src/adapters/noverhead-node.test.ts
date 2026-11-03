@@ -3,6 +3,7 @@ import { getUIAdapter, listUIAdapters } from "./registry";
 import { getAdapterDisplay } from "./adapter-display-registry";
 import { CONNECT_SOURCE_NAMES } from "../components/AdapterLoginChrome";
 import type { CreateConfigValues } from "@paperclipai/adapter-utils";
+import { defaultCreateValues } from "../components/agent-config-defaults";
 
 describe("NOverhead onboarding source", () => {
   it("registers a real Pi-backed third source while retaining Claude and OpenAI", () => {
@@ -11,7 +12,13 @@ describe("NOverhead onboarding source", () => {
       expect(getAdapterDisplay(type).recommended).toBe(true);
     }
     expect(CONNECT_SOURCE_NAMES.noverhead_node).toBe("NOverhead Node");
-    const built = getUIAdapter("noverhead_node").buildAdapterConfig({ url: "http://node:18766/v1" } as CreateConfigValues);
+    const adapter = getUIAdapter("noverhead_node");
+    expect(adapter.ConfigFields).not.toBe(getUIAdapter("pi_local").ConfigFields);
+    const built = adapter.buildAdapterConfig({
+      ...defaultCreateValues,
+      url: "http://node:18766/v1",
+      adapterSchemaValues: { url: "http://node:18766/v1" },
+    } satisfies CreateConfigValues);
     expect(built).toMatchObject({ url: "http://node:18766/v1", model: "noverhead/node-default" });
     expect(built).not.toHaveProperty("apiKey");
   });

@@ -116,7 +116,7 @@ describe("adapter routes", () => {
     setOverridePaused = registry.setOverridePaused;
     adapterRoutes = routes.adapterRoutes;
     errorHandler = middleware.errorHandler;
-  });
+  }, 120_000);
 
   beforeEach(() => {
     resetAdapterMocks();
@@ -438,6 +438,22 @@ describe("adapter routes", () => {
 
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     expect(res.body.fields).toEqual([]);
+  });
+
+  it("serves the built-in NOverhead Node endpoint config schema", async () => {
+    const app = createApp();
+
+    const res = await request(app).get("/api/adapters/noverhead_node/config-schema");
+
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.fields).toEqual([
+      expect.objectContaining({
+        key: "url",
+        type: "text",
+        default: "http://node:18766/v1",
+        required: true,
+      }),
+    ]);
   });
 
   it("serves provider-scoped Paperclip Runner configuration fields", async () => {

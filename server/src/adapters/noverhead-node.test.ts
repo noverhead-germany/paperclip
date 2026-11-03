@@ -7,7 +7,7 @@ vi.mock("@paperclipai/adapter-pi-local/server", () => ({
   testEnvironment: pi.test,
   preparePiRuntimeConfig: async ({ env }: { env: Record<string, string> }) => ({ env, cleanup: pi.cleanup }),
 }));
-import { createNOverheadNodeAdapter, nodeAdapterConfig, NODE_KEY, NODE_MODEL } from "./noverhead-node.js";
+import { createNOverheadNodeAdapter, nodeAdapterConfig, NODE_DEFAULT_URL, NODE_KEY, NODE_MODEL } from "./noverhead-node.js";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
@@ -25,6 +25,19 @@ describe("NOverhead Node adapter preset", () => {
     });
     expect(() => nodeAdapterConfig({ ...config, url: "http://169.254.169.254/v1" })).toThrow();
     expect(() => nodeAdapterConfig({ ...config, env: {} })).toThrow();
+  });
+
+  it("declares the Node URL through the built-in adapter config schema", () => {
+    expect(adapter().getConfigSchema?.()).toEqual({
+      fields: [{
+        key: "url",
+        label: "NOverhead Node endpoint",
+        type: "text",
+        default: NODE_DEFAULT_URL,
+        required: true,
+        hint: expect.stringContaining("managed separately as a Paperclip secret"),
+      }],
+    });
   });
 
   it("does not treat an unauthorized Node or a mere runtime warning as a connection", async () => {
