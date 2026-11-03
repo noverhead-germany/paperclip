@@ -26,6 +26,9 @@ native agent-runner compilation. Stop it with:
 Stop verifies the listener's process command and repository path, gracefully
 stops only the embedded database under the development home, then stops that
 watcher's process tree. It refuses to affect an unrelated process on port 3102.
+The first start initializes the isolated schema and Vite dependency cache and
+can take a few minutes; later source edits use watch reloads without rebuilding
+the runner or a Docker image.
 
 The current Node container is reachable by Docker peers as `node:18766`, but its
 port is not published to Windows. To make it available to this loopback-only dev
