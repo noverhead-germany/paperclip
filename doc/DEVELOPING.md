@@ -2,6 +2,79 @@
 
 This project can run fully in local dev without setting up PostgreSQL manually.
 
+## NOverhead Node adapter development on Windows
+
+From the repository root, run the focused helper:
+
+```powershell
+.\scripts\dev-noverhead.ps1 start
+```
+
+It starts the server's existing `dev:watch` path on `http://127.0.0.1:3102`,
+using its hot reload, with an isolated Paperclip home at
+`%LOCALAPPDATA%\Paperclip\noverhead-node-dev`. It deliberately clears inherited
+database/config paths and disables loading the repository `.env`; with no
+`DATABASE_URL`, Paperclip uses its embedded PostgreSQL database in that isolated
+home. The production Paperclip container, port 3100, and its Docker volume are
+not used. This server-only watch command avoids the dev-runner's unrelated
+native agent-runner compilation. Stop it with:
+
+```powershell
+.\scripts\dev-noverhead.ps1 stop
+```
+
+Stop verifies the listener's process command and repository path, gracefully
+stops only the embedded database under the development home, then stops that
+watcher's process tree. It refuses to affect an unrelated process on port 3102.
+
+The current Node container is reachable by Docker peers as `node:18766`, but its
+port is not published to Windows. To make it available to this loopback-only dev
+server, use the temporary bridge in a second PowerShell window:
+
+```powershell
+.\scripts\dev-noverhead.ps1 bridge-start
+```
+
+The bridge publishes only `127.0.0.1:18767`, joins the existing `noverhead`
+network, has no volume mounts, and forwards to `node:18766`. In the isolated
+Paperclip UI, configure the adapter URL as
+`http://127.0.0.1:18767/v1`. Store the short-lived, minimum-grant Node
+credential using Paperclip's Secret Provider; do not put it in the repository,
+command line, or logs. When finished, remove only this labelled, volume-free
+bridge:
+
+```powershell
+.\scripts\dev-noverhead.ps1 bridge-stop
+```
+
+Run the adapter's focused tests and check the live dev server with:
+
+```powershell
+.\scripts\dev-noverhead.ps1 test
+.\scripts\dev-noverhead.ps1 status
+```
+
+To invoke the checked-in adapter against the live Node, first obtain a
+short-lived, minimum-grant credential through the approved Node provisioning
+flow, then run:
+
+```powershell
+.\scripts\dev-noverhead.ps1 live-test
+```
+
+The helper reads the credential as a secure prompt and pipes it to the adapter
+probe over stdin; it does not write the credential to a file, argument list,
+environment variable, or test log. The live probe prints only the adapter
+result, model, response, usage, and safe adapter messages.
+
+After registering the development owner and configuring the adapter secret in
+the isolated instance, use the UI on port 3102 to run a real agent task. The
+adapter sends authenticated `GET /v1/models` and `POST /v1/chat/completions`
+requests directly to the Node; run events and reported usage remain visible in
+that development instance. Repeated source edits hot-reload without a Docker
+production build. The helper refuses to use a busy port, an existing bridge
+container, or a non-owned bridge during cleanup.
+
 ## Persistent case handoffs
 
 The Cases experiment supports prompt-driven agent workflows on one ordinary task.
