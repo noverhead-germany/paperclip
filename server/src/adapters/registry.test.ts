@@ -81,6 +81,7 @@ describe("built-in runtime connection tool delivery", () => {
     ["hermes_gateway", "invocation_context"],
     ["hermes_local", "environment"],
     ["kimi_local", "environment"],
+    ["noverhead_node", "native_mcp"],
     ["openclaw_gateway", "invocation_context"],
     ["opencode_local", "environment"],
     ["paperclip_runner", "environment"],
