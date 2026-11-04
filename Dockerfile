@@ -179,6 +179,12 @@ RUN mkdir -p /provider-pack /provider-pack-transport \
 FROM base AS production
 ARG USER_UID=1000
 ARG USER_GID=1000
+# Keep the Codex CLI and its native package in lockstep. The upstream npm
+# package declares its platform binaries as optional dependencies; npm may
+# silently omit one after a registry/download error, leaving a broken launcher
+# in an otherwise successful image. Install the selected Linux target by its
+# exact published alias and fail the image build if the native CLI is missing.
+ARG CODEX_CLI_VERSION=0.166.0
 # Refreshes the tool layer below when it changes (CI stamps an ISO week, so
 # the @latest CLI tools advance weekly). Without it the cached layer would
 # freeze the tools until an unrelated cache bust.
@@ -189,7 +195,14 @@ WORKDIR /app
 # (the single most expensive layer: four CLI toolchains + apt, per arch) can
 # never hit the layer cache and rebuilds on every build.
 RUN echo "cli-tools-epoch: ${CLI_TOOLS_CACHE_EPOCH}" \
-  && npm install --global --omit=dev @anthropic-ai/claude-code@latest @openai/codex@latest opencode-ai @google/gemini-cli@latest @moonshot-ai/kimi-code@latest @earendil-works/pi-coding-agent@0.74.0 \
+  && case "$(dpkg --print-architecture)" in \
+    amd64) CODEX_NPM_PLATFORM=linux-x64 ;; \
+    arm64) CODEX_NPM_PLATFORM=linux-arm64 ;; \
+    *) echo "ERROR: unsupported Codex CLI architecture: $(dpkg --print-architecture)" >&2; exit 1 ;; \
+  esac \
+  && npm install --global --omit=dev @anthropic-ai/claude-code@latest "@openai/codex@${CODEX_CLI_VERSION}" "@openai/codex-${CODEX_NPM_PLATFORM}@npm:@openai/codex@${CODEX_CLI_VERSION}-${CODEX_NPM_PLATFORM}" opencode-ai @google/gemini-cli@latest @moonshot-ai/kimi-code@latest @earendil-works/pi-coding-agent@0.74.0 \
+  && test "$(codex --version)" = "codex-cli ${CODEX_CLI_VERSION}" \
+  && node -e 'const p=require("/usr/local/lib/node_modules/@openai/codex-"+process.argv[2]+"/package.json"); const expected=process.argv[1]+"-"+process.argv[2]; if(p.version!==expected) throw new Error("Codex native package version mismatch"); console.log("Verified Codex CLI "+process.argv[1]+" with "+p.version)' "${CODEX_CLI_VERSION}" "${CODEX_NPM_PLATFORM}" \
   && apt-get update \
   && apt-get install -y --no-install-recommends openssh-client jq \
   && rm -rf /var/lib/apt/lists/* \
